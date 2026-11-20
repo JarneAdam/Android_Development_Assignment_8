@@ -1,15 +1,17 @@
 package be.vives.jarne.assignment_8.ui
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import be.vives.jarne.assignment_8.data.BoredRepository
-import be.vives.jarne.assignment_8.data.NetworkBoredRepository
 import be.vives.jarne.assignment_8.data.ToDoFlags
 import be.vives.jarne.assignment_8.data.ToDoRepository
 import be.vives.jarne.assignment_8.data.toDescription
 import be.vives.jarne.assignment_8.models.ToDo
 import be.vives.jarne.assignment_8.models.User
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,66 +35,48 @@ data class AddEditToDoUiState(
         get() = initialToDo == null
 }
 
-class AddEditToDoViewModel(
-    toDoId: Int?,
-    private val repository: ToDoRepository? = null,
-    private val boredRepository: BoredRepository = NetworkBoredRepository(),
+@HiltViewModel(assistedFactory = AddEditToDoViewModel.Factory::class)
+class AddEditToDoViewModel @AssistedInject constructor(
+    @Assisted toDoId: Int?,
+    private val repository: ToDoRepository,
+    private val boredRepository: BoredRepository,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(
-        AddEditToDoUiState(
-        )
-    )
+    private val _uiState = MutableStateFlow(AddEditToDoUiState())
     val uiState: StateFlow<AddEditToDoUiState> = _uiState.asStateFlow()
 
     init {
-        repository?.let { todoRepository ->
-            viewModelScope.launch {
-                todoRepository.seedIfNeeded()
-                launch {
-                    todoRepository.activeUsers.collect { users ->
+        viewModelScope.launch {
+            repository.seedIfNeeded()
+            launch {
+                repository.activeUsers.collect { users ->
+                    _uiState.update {
+                        it.copy(
+                            users = users,
+                            selectedUser = it.initialToDo?.assignedToUserId?.let { id ->
+                                users.firstOrNull { user -> user.id == id }
+                            } ?: it.selectedUser,
+                        )
+                    }
+                }
+            }
+            if (toDoId != null) {
+                repository.observeToDo(toDoId).collect { toDo ->
+                    if (toDo != null) {
                         _uiState.update {
                             it.copy(
-                                users = users,
-                                selectedUser = it.initialToDo?.assignedToUserId?.let { id ->
-                                    users.firstOrNull { user -> user.id == id }
-                                } ?: it.selectedUser,
+                                title = toDo.title,
+                                description = toDo.description,
+                                selectedUser = it.users.firstOrNull { user -> user.id == toDo.assignedToUserId },
+                                analysisDone = toDo.analysisDone,
+                                developmentDone = toDo.developmentDone,
+                                reviewAndTestingDone = toDo.reviewAndTestingDone,
+                                acceptanceDone = toDo.acceptanceDone,
+                                initialToDo = toDo,
                             )
                         }
                     }
                 }
-                if (toDoId != null) {
-                    todoRepository.observeToDo(toDoId).collect { toDo ->
-                        if (toDo != null) {
-                            _uiState.update {
-                                it.copy(
-                                    title = toDo.title,
-                                    description = toDo.description,
-                                    selectedUser = it.users.firstOrNull { user -> user.id == toDo.assignedToUserId },
-                                    analysisDone = toDo.analysisDone,
-                                    developmentDone = toDo.developmentDone,
-                                    reviewAndTestingDone = toDo.reviewAndTestingDone,
-                                    acceptanceDone = toDo.acceptanceDone,
-                                    initialToDo = toDo,
-                                )
-                            }
-                        }
-                    }
-                }
             }
-        }
-    }
-
-    class Factory(
-        private val toDoId: Int?,
-        private val repository: ToDoRepository,
-        private val boredRepository: BoredRepository = NetworkBoredRepository(),
-    ) : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (!modelClass.isAssignableFrom(AddEditToDoViewModel::class.java)) {
-                throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
-            }
-            @Suppress("UNCHECKED_CAST")
-            return AddEditToDoViewModel(toDoId, repository, boredRepository) as T
         }
     }
 
@@ -155,7 +139,6 @@ class AddEditToDoViewModel(
 
     fun save() {
         val state = _uiState.value
-        val repository = repository ?: error("A ToDoRepository is required to save a ToDo")
         viewModelScope.launch {
             val flags = ToDoFlags(
                 analysisDone = state.analysisDone,
@@ -184,5 +167,10 @@ class AddEditToDoViewModel(
             )
             repository.save(toDo)
         }
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(toDoId: Int?): AddEditToDoViewModel
     }
 }

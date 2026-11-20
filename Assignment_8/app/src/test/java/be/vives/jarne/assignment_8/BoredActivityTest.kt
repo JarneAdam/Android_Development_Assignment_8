@@ -2,10 +2,15 @@ package be.vives.jarne.assignment_8
 
 import be.vives.jarne.assignment_8.data.BoredActivityDto
 import be.vives.jarne.assignment_8.data.BoredRepository
+import be.vives.jarne.assignment_8.data.ToDoFlags
+import be.vives.jarne.assignment_8.data.ToDoRepository
 import be.vives.jarne.assignment_8.data.toDescription
+import be.vives.jarne.assignment_8.models.ToDo
+import be.vives.jarne.assignment_8.models.User
 import be.vives.jarne.assignment_8.ui.AddEditToDoViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -24,6 +29,23 @@ import org.junit.Test
 class BoredActivityTest {
 
     private val testDispatcher = StandardTestDispatcher()
+    private val toDoRepository = object : ToDoRepository {
+        override val toDos = flowOf(emptyList<ToDo>())
+        override val activeUsers = flowOf(emptyList<User>())
+
+        override fun observeToDo(id: Int) = flowOf(null)
+
+        override suspend fun seedIfNeeded() = Unit
+
+        override suspend fun save(toDo: ToDo): Unit = error("Unexpected save")
+
+        override suspend fun newToDo(
+            title: String,
+            description: String,
+            assignedToUserId: Int?,
+            flags: ToDoFlags,
+        ): ToDo = error("Unexpected task creation")
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -107,7 +129,11 @@ class BoredActivityTest {
             }
         }
 
-        val viewModel = AddEditToDoViewModel(toDoId = null, boredRepository = fakeRepository)
+        val viewModel = AddEditToDoViewModel(
+            toDoId = null,
+            repository = toDoRepository,
+            boredRepository = fakeRepository,
+        )
 
         assertTrue(viewModel.uiState.value.isNewToDo)
         assertEquals("", viewModel.uiState.value.title)
@@ -137,7 +163,11 @@ class BoredActivityTest {
             }
         }
 
-        val viewModel = AddEditToDoViewModel(toDoId = null, boredRepository = fakeRepository)
+        val viewModel = AddEditToDoViewModel(
+            toDoId = null,
+            repository = toDoRepository,
+            boredRepository = fakeRepository,
+        )
 
         viewModel.onSurpriseMe()
         advanceUntilIdle()

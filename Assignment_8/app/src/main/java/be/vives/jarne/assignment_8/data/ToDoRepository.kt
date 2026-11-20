@@ -1,17 +1,32 @@
 package be.vives.jarne.assignment_8.data
 
-import be.vives.jarne.assignment_8.models.ToDo
 import be.vives.jarne.assignment_8.models.MockupToDo
+import be.vives.jarne.assignment_8.models.ToDo
 import be.vives.jarne.assignment_8.models.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import javax.inject.Inject
 
-class ToDoRepository(private val dao: ToDoDao) {
-    val toDos: Flow<List<ToDo>> = dao.observeToDos()
-    val activeUsers: Flow<List<User>> = dao.observeActiveUsers()
+interface ToDoRepository {
+    val toDos: Flow<List<ToDo>>
+    val activeUsers: Flow<List<User>>
 
-    fun observeToDo(id: Int): Flow<ToDo?> = dao.observeToDo(id)
+    fun observeToDo(id: Int): Flow<ToDo?>
+    suspend fun seedIfNeeded()
+    suspend fun save(toDo: ToDo)
+    suspend fun newToDo(title: String, description: String, assignedToUserId: Int?, flags: ToDoFlags): ToDo
+}
 
-    suspend fun seedIfNeeded() {
+class ToDoRepositoryImpl @Inject constructor(private val dao: ToDoDao) : ToDoRepository {
+    private val seedMutex = Mutex()
+
+    override val toDos: Flow<List<ToDo>> = dao.observeToDos()
+    override val activeUsers: Flow<List<User>> = dao.observeActiveUsers()
+
+    override fun observeToDo(id: Int): Flow<ToDo?> = dao.observeToDo(id)
+
+    override suspend fun seedIfNeeded() = seedMutex.withLock {
         if (dao.countUsers() == 0) {
             dao.insertUsers(MockupToDo.getUsers())
         }
@@ -20,7 +35,7 @@ class ToDoRepository(private val dao: ToDoDao) {
         }
     }
 
-    suspend fun save(toDo: ToDo) {
+    override suspend fun save(toDo: ToDo) {
         if (toDo.number == 0) {
             dao.insertToDo(toDo.copy(number = dao.nextToDoNumber()))
         } else {
@@ -28,7 +43,7 @@ class ToDoRepository(private val dao: ToDoDao) {
         }
     }
 
-    suspend fun newToDo(title: String, description: String, assignedToUserId: Int?, flags: ToDoFlags): ToDo {
+    override suspend fun newToDo(title: String, description: String, assignedToUserId: Int?, flags: ToDoFlags): ToDo {
         return ToDo(
             number = 0,
             title = title,

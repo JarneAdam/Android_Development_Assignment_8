@@ -2,27 +2,30 @@ package be.vives.jarne.assignment_8.ui
 
 import android.app.Activity
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import be.vives.jarne.assignment_8.data.AppDatabase
-import be.vives.jarne.assignment_8.data.ToDoRepository
+import kotlinx.serialization.Serializable
 
-private data object ToDoListRoute
-private data class ToDoDetailRoute(val id: Int)
-private data class AddEditToDoRoute(val id: Int? = null)
+@Serializable
+private data object ToDoListRoute : NavKey
+
+@Serializable
+private data class ToDoDetailRoute(val id: Int) : NavKey
+
+@Serializable
+private data class AddEditToDoRoute(val id: Int? = null) : NavKey
 
 @Composable
 fun ToDoApp(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val repository = remember { ToDoRepository(AppDatabase.getInstance(context).toDoDao()) }
-    val backStack = remember { mutableStateListOf<Any>(ToDoListRoute) }
+    val backStack = rememberNavBackStack(ToDoListRoute)
 
     NavDisplay(
         backStack = backStack,
@@ -37,7 +40,7 @@ fun ToDoApp(modifier: Modifier = Modifier) {
             entry<ToDoListRoute> {
                 ToDoListScreen(
                     modifier = modifier,
-                    viewModel = viewModel(factory = ToDoListViewModel.Factory(repository)),
+                    viewModel = hiltViewModel(),
                     onToDoClick = { toDo ->
                         backStack.add(ToDoDetailRoute(toDo.number))
                     },
@@ -49,9 +52,9 @@ fun ToDoApp(modifier: Modifier = Modifier) {
             }
 
             entry<ToDoDetailRoute> { route ->
-                val detailViewModel: ToDetailViewModel = viewModel(
-                    factory = ToDetailViewModel.Factory(route.id, repository),
-                )
+                val detailViewModel = hiltViewModel<ToDetailViewModel, ToDetailViewModel.Factory> { factory ->
+                    factory.create(route.id)
+                }
                 ToDetailScreen(
                     modifier = modifier,
                     viewModel = detailViewModel,
@@ -63,9 +66,9 @@ fun ToDoApp(modifier: Modifier = Modifier) {
             }
 
             entry<AddEditToDoRoute> { route ->
-                val addEditViewModel: AddEditToDoViewModel = viewModel(
-                    factory = AddEditToDoViewModel.Factory(route.id, repository),
-                )
+                val addEditViewModel = hiltViewModel<AddEditToDoViewModel, AddEditToDoViewModel.Factory> { factory ->
+                    factory.create(route.id)
+                }
                 AddEditToDoScreen(
                     modifier = modifier,
                     viewModel = addEditViewModel,
